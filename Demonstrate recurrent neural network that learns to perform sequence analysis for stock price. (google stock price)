@@ -1,0 +1,40 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout
+from sklearn.preprocessing import MinMaxScaler
+
+# Synthetic stock data (sine wave + noise)
+np.random.seed(0)
+data = (np.sin(np.linspace(0,50,300)) + np.random.normal(scale=0.2,size=300)).reshape(-1,1)
+
+# Scale
+scaler = MinMaxScaler()
+data_s = scaler.fit_transform(data)
+
+# Sequences
+SEQ = 60
+X, y = [], []
+for i in range(SEQ, len(data_s)):
+    X.append(data_s[i-SEQ:i, 0])
+    y.append(data_s[i, 0])
+X, y = np.array(X).reshape(-1, SEQ, 1), np.array(y)
+
+# LSTM model
+model = Sequential([
+    LSTM(50, return_sequences=True, input_shape=(SEQ,1)), Dropout(0.2),
+    LSTM(50, return_sequences=True), Dropout(0.2),
+    LSTM(50), Dropout(0.2),
+    Dense(1)
+])
+model.compile(optimizer='adam', loss='mse')
+model.fit(X, y, epochs=20, batch_size=32, verbose=1)
+
+# Plot
+pred = scaler.inverse_transform(model.predict(X))
+actual = scaler.inverse_transform(y.reshape(-1,1))
+plt.figure(figsize=(12,5))
+plt.plot(actual, color='red', label='Actual')
+plt.plot(pred,   color='blue', label='Predicted')
+plt.title('LSTM Stock Price Prediction'); plt.xlabel('Time'); plt.ylabel('Price')
+plt.legend(); plt.grid(); plt.show()
