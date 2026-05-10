@@ -1,0 +1,48 @@
+import tensorflow as tf
+import numpy as np
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+import matplotlib.pyplot as plt
+
+# Load & preprocess image
+img_path = tf.keras.utils.get_file('img.jpg','https://tensorflow.org/images/surf.jpg')
+img = tf.keras.preprocessing.image.load_img(img_path, target_size=(224,224))
+img = np.expand_dims(tf.keras.preprocessing.image.img_to_array(img)/255.0, 0)
+
+# CNN feature extraction
+cnn = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, pooling='avg')
+feat = cnn.predict(img)
+
+# Tokenize caption
+captions = ["start person surfing on wave end"]
+tok = tf.keras.preprocessing.text.Tokenizer()
+tok.fit_on_texts(captions)
+vocab, max_len = len(tok.word_index)+1, 6
+
+# Build training sequences
+seq = tok.texts_to_sequences(captions)[0]
+X1, X2, y = [], [], []
+for i in range(1, len(seq)):
+    X2.append(pad_sequences([seq[:i]], maxlen=max_len)[0])
+    X1.append(feat[0]); y.append(seq[i])
+X1, X2, y = np.array(X1), np.array(X2), np.array(y)
+
+# Model
+img_in  = tf.keras.Input(shape=(1280,))
+seq_in  = tf.keras.Input(shape=(max_len,))
+x1 = tf.keras.layers.Dense(50, activation='relu')(img_in)
+x2 = tf.keras.layers.LSTM(50)(tf.keras.layers.Embedding(vocab,20)(seq_in))
+out = tf.keras.layers.Dense(vocab, activation='softmax')(tf.keras.layers.add([x1,x2]))
+model = tf.keras.Model([img_in,seq_in], out)
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
+model.fit([X1,X2], y, epochs=100, verbose=0)
+
+# Generate caption
+iw = {v:k for k,v in tok.word_index.items()}
+text = "start"
+for _ in range(max_len):
+    s = pad_sequences([tok.texts_to_sequences([text])[0]], maxlen=max_len)
+    w = iw[np.argmax(model.predict([feat,s], verbose=0))]
+    text += " "+w
+    if w == "end": break
+
+plt.imshow(img[0]); plt.title(text); plt.axis('off'); plt.show()
